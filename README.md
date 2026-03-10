@@ -1,5 +1,7 @@
 # qclaw-wechat-client
 
+[中文文档](./README.zh-CN.md)
+
 Reverse-engineered TypeScript client for QClaw's WeChat Access API.
 
 QClaw (管家 OpenClaw) is a Tencent Electron desktop app that wraps an OpenClaw AI Gateway service. It authenticates exclusively through WeChat OAuth2 QR-code login and communicates with Tencent backend servers via a jprx gateway protocol. This library implements that protocol as a standalone TypeScript module.
@@ -11,13 +13,16 @@ Extracted from `QClaw.app` -> `Contents/Resources/app.asar` (unencrypted). The A
 ## Install
 
 ```bash
-pnpm install
+npm install qclaw-wechat-client
+# or
+pnpm add qclaw-wechat-client
 ```
 
-## Build
+## Development
 
 ```bash
-pnpm build        # compile to dist/
+pnpm install      # install dependencies
+pnpm build        # bundle with tsdown
 pnpm typecheck    # type-check only
 ```
 
@@ -25,12 +30,13 @@ pnpm typecheck    # type-check only
 
 ```typescript
 import { QClawClient } from "qclaw-wechat-client";
+import type { WxLoginStateData, WxLoginData } from "qclaw-wechat-client";
 
 const client = new QClawClient({ env: "production" });
 
 // Step 1 - get login state (CSRF token)
 const stateRes = await client.getWxLoginState({ guid: "machine-id" });
-const state = QClawClient.unwrap<{ state: string }>(stateRes)?.state;
+const state = QClawClient.unwrap<WxLoginStateData>(stateRes)?.state;
 
 // Step 2 - show QR code to user
 const qrUrl = client.buildWxLoginUrl(state!);
@@ -40,19 +46,17 @@ console.log("Scan this:", qrUrl);
 const loginRes = await client.wxLogin({ guid: "machine-id", code: authCode, state: state! });
 
 // Step 4 - build OpenClaw config patch
-const channelToken = QClawClient.unwrap<{ openclaw_channel_token: string }>(loginRes)?.openclaw_channel_token;
+const channelToken = QClawClient.unwrap<WxLoginData>(loginRes)?.openclaw_channel_token;
 const config = await client.buildPostLoginConfig(channelToken!);
 // -> { channels: { "wechat-access": { token } }, models: { providers: { qclaw: { apiKey } } } }
 ```
 
-## Demos
+## Demo
+
+The included example walks through the full WeChat login flow with an echo bot:
 
 ```bash
-pnpm demo:endpoints   # print all endpoints, URLs, headers, response format
-pnpm demo:login       # walk through the full WeChat login flow
-pnpm demo:update      # check for app updates
-pnpm demo:config      # build OpenClaw config patches for prod & test
-AGP_TOKEN=xxx pnpm demo:ws-echo  # connect to WebSocket and echo back messages
+pnpm demo          # interactive full-flow demo (login + AGP echo bot)
 ```
 
 ## API
@@ -62,8 +66,8 @@ AGP_TOKEN=xxx pnpm demo:ws-echo  # connect to WebSocket and echo back messages
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `env` | `"production" \| "test"` | `"production"` | Target environment |
-| `jwtToken` | `string` | — | Restore a JWT from a previous session |
-| `userInfo` | `UserInfo` | — | Restore user info from a previous session |
+| `jwtToken` | `string` | -- | Restore a JWT from a previous session |
+| `userInfo` | `UserInfo` | -- | Restore user info from a previous session |
 | `webVersion` | `string` | `"1.4.0"` | Version string sent in every request body |
 
 ### Properties
@@ -85,14 +89,14 @@ AGP_TOKEN=xxx pnpm demo:ws-echo  # connect to WebSocket and echo back messages
 | `wxLogin({ guid, code, state })` | `data/4026/forward` | Exchange WeChat auth code for JWT + channel token |
 | `getUserInfo({ guid })` | `data/4027/forward` | Fetch user profile |
 | `wxLogout({ guid })` | `data/4028/forward` | Invalidate session |
-| `buildWxLoginUrl(state)` | — | Build the WeChat OAuth QR-code URL |
+| `buildWxLoginUrl(state)` | -- | Build the WeChat OAuth QR-code URL |
 
 #### Keys & tokens
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `createApiKey()` | `data/4055/forward` | Create API key for qclaw model provider |
-| `refreshChannelToken()` | `data/4058/forward` | Refresh the wechat-access channel token |
+| Method | Endpoint | Returns | Description |
+|---|---|---|---|
+| `createApiKey()` | `data/4055/forward` | `ApiResponse<ApiKeyData>` | Create API key for qclaw model provider |
+| `refreshChannelToken()` | `data/4058/forward` | `string \| null` | Refresh the wechat-access channel token (returns token string directly, not wrapped in `ApiResponse`) |
 
 #### Invite codes
 
@@ -181,8 +185,8 @@ client.start();
 
 | Config option | Type | Default | Description |
 |---|---|---|---|
-| `url` | `string` | — | WebSocket endpoint (see Environment URLs) |
-| `token` | `string` | — | Channel auth token |
+| `url` | `string` | -- | WebSocket endpoint (see Environment URLs) |
+| `token` | `string` | -- | Channel auth token |
 | `guid` | `string` | `""` | Device GUID (echoed in uplink messages) |
 | `userId` | `string` | `""` | User ID (echoed in uplink messages) |
 | `reconnectInterval` | `number` | `3000` | Base reconnect delay (ms) |
@@ -193,7 +197,7 @@ client.start();
 
 | Callback | Argument | Description |
 |---|---|---|
-| `onConnected` | — | WebSocket connected |
+| `onConnected` | -- | WebSocket connected |
 | `onDisconnected` | `reason?: string` | Connection lost |
 | `onPrompt` | `PromptMessage` | User sent a message |
 | `onCancel` | `CancelMessage` | Turn cancelled |
@@ -208,7 +212,7 @@ client.start();
 | `sendToolCallUpdate(sessionId, promptId, toolCall, guid?, userId?)` | Update tool call status |
 | `sendPromptResponse(payload, guid?, userId?)` | Send final turn response (raw) |
 | `sendTextResponse(sessionId, promptId, text, guid?, userId?)` | Convenience: end_turn with text |
-| `sendErrorResponse(sessionId, promptId, error, guid?, userId?)` | Convenience: error response |
+| `sendErrorResponse(sessionId, promptId, errorMessage, guid?, userId?)` | Convenience: error response |
 | `sendCancelledResponse(sessionId, promptId, guid?, userId?)` | Convenience: cancelled ack |
 
 ### Lifecycle methods
@@ -250,14 +254,6 @@ All messages are JSON text frames with a unified envelope:
 - **System wakeup detection**: timer drift > 15s triggers reconnect
 - **Message dedup**: Set of processed msg_ids, cleaned every 5min (max 1000)
 
-### Demo
-
-```bash
-AGP_TOKEN=<channel_token> pnpm demo:ws-echo
-```
-
-The echo bot receives messages from WeChat users and echoes them back with streaming.
-
 ---
 
 ## HTTP Protocol details
@@ -295,20 +291,24 @@ X-OpenClaw-Token : <JWT> (when logged in)
 
 ### Environment URLs
 
-| | Production | Test |
+| Field (`EnvUrls`) | Production | Test |
 |---|---|---|
-| **Gateway** | `https://jprx.m.qq.com/` | `https://jprx.sparta.html5.qq.com/` |
-| **AI Base** | `https://mmgrcalltoken.3g.qq.com/aizone/v1` | `https://jprx.sparta.html5.qq.com/aizone/v1` |
-| **WebSocket** | `wss://mmgrcalltoken.3g.qq.com/agentwss` | `wss://jprx.sparta.html5.qq.com/agentwss` |
-| **WX Redirect** | `https://security.guanjia.qq.com/login` | `https://security-test.guanjia.qq.com/login` |
+| `jprxGateway` | `https://jprx.m.qq.com/` | `https://jprx.sparta.html5.qq.com/` |
+| `qclawBaseUrl` | `https://mmgrcalltoken.3g.qq.com/aizone/v1` | `https://jprx.sparta.html5.qq.com/aizone/v1` |
+| `wechatWsUrl` | `wss://mmgrcalltoken.3g.qq.com/agentwss` | `wss://jprx.sparta.html5.qq.com/agentwss` |
+| `wxLoginRedirectUri` | `https://security.guanjia.qq.com/login` | `https://security-test.guanjia.qq.com/login` |
+| `beaconUrl` | `https://pcmgrmonitor.3g.qq.com/datareport` | `https://pcmgrmonitor.3g.qq.com/test/datareport` |
 
 ### WeChat OAuth
 
-| | Production | Test |
+The `WxLoginConfig` interface exposes per-environment OAuth settings:
+
+| Field | Production | Test |
 |---|---|---|
-| **AppID** | `wx9d11056dd75b7240` | `wx3dd49afb7e2cf957` |
-| **Scope** | `snsapi_login` | `snsapi_login` |
-| **SDK** | `https://res.wx.qq.com/connect/zh_CN/htmledition/js/wxLogin.js` | same |
+| `appid` | `wx9d11056dd75b7240` | `wx3dd49afb7e2cf957` |
+| `redirect_uri` | `https://security.guanjia.qq.com/login` | `https://security-test.guanjia.qq.com/login` |
+
+The OAuth scope (`snsapi_login`) is hardcoded in `buildWxLoginUrl()`.
 
 ### OpenClaw config paths
 
