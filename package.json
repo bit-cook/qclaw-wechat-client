@@ -3,21 +3,24 @@
   "version": "0.1.0",
   "description": "Reverse-engineered TypeScript client for QClaw's WeChat Access API (jprx gateway protocol)",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/index.mjs",
+  "types": "dist/index.d.mts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      }
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit",
     "demo": "tsx examples/full-flow.ts"
   },
   "devDependencies": {
     "@types/ws": "^8.18.1",
+    "tsdown": "^0.21.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },
@@ -29,5 +32,10 @@
   "license": "MIT",
   "dependencies": {
     "ws": "^8.19.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
