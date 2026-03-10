@@ -1,6 +1,6 @@
 {
   "name": "qclaw-wechat-client",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Reverse-engineered TypeScript client for QClaw's WeChat Access API (jprx gateway protocol)",
   "type": "module",
   "main": "dist/index.mjs",
